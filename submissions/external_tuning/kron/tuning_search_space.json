@@ -1,0 +1,62 @@
+{
+    "learning_rate": {
+        "min": 3e-5, "max": 3e-3, "scaling": "log"
+    },
+    "b1": {
+        "feasible_points": [0.9]
+    },
+    "weight_decay": {
+        "min": 0.01, "max": 1.0, "scaling": "log"
+    },
+    "preconditioner_lr": {
+        "min": 0.1, "max": 1.0, "scaling": "linear"
+    },
+    "preconditioner_init_scale": {
+        "feasible_points": [1.0]
+    },
+    "block_size": {
+        "feasible_points": [512]
+    },
+    "warmup_factor": {
+        "feasible_points": [0.0]
+    },
+    "label_smoothing": {
+        "feasible_points": [0.0, 0.1, 0.2]
+    },
+    "dropout_rate": {
+        "feasible_points": [0.0, 0.1]
+    },
+    "grad_clip": {
+        "feasible_points": [null]
+    },
+    "max_size_triangular": {
+        "feasible_points": [16384]
+    },
+    "min_ndim_triangular": {
+        "feasible_points": [1]
+    },
+    "memory_save_mode": {
+        "feasible_points": [null]
+    },
+    "precond_update_precision": {
+        "feasible_points": ["tensorfloat32"]
+    },
+    "precond_grads_precision": {
+        "feasible_points": [null]
+    },
+    "lax_map_scanned_layers": {
+        "feasible_points": [false]
+    },
+    "lax_map_batch_size": {
+        "feasible_points": [8]
+    },
+    "merge_small_dims": {
+        "feasible_points": [true]
+    },
+    "target_merged_dim_size": {
+        "feasible_points": [4096]
+    },
+    "partition_grads_into_blocks": {
+        "feasible_points": [false]
+    }
+} 
