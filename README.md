@@ -148,3 +148,20 @@ year            = {2025},
 url             = {https://openreview.net/forum?id=CtM5xjRSfm}
 }
 ```
+
+## TPU notes
+
+```bash
+python3 submission_runner.py \
+    --framework=jax \
+    --workload=imagenet_resnet \
+    --experiment_dir=/home/evanatyourservice/algorithmic-efficiency/experiments/jax_nadamw_full_budget \
+    --experiment_name=nadamw_full_budget \
+    --submission_path=prize_qualification_baselines/external_tuning/jax_nadamw_full_budget.py \
+    --tuning_ruleset=external \
+    --tuning_search_space=prize_qualification_baselines/external_tuning/tuning_search_space.json \
+    --num_tuning_trials=5 \
+    --data_dir="gs://algoperf-v100-data/imagenet/jax" \
+    --save_checkpoints=false \
+    --use_wandb
+```

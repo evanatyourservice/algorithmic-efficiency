@@ -4,7 +4,8 @@ __pycache__
 *eggs
 .vscode/
 env/
-venv/
+venv*/
+build/
 workdir/
 makefile
 *.out
