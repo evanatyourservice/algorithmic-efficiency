@@ -9,9 +9,9 @@ from jax import lax
 import jax.numpy as jnp
 import optax
 
-from algorithmic_efficiency import spec
+from algoperf import spec
 
-from submissions.external_tuning.kron.kron import kron
+from submissions.external_tuning.kron.kron import kron, precond_update_prob_schedule
 
 _GRAD_CLIP_EPS = 1e-6
 
@@ -28,42 +28,38 @@ def init_optimizer_state(
     del model_state
     del rng
 
-    def jax_cosine_warmup(step_hint: int, hyperparameters):
-        # Create learning rate schedule.
+    def linear_warmup_and_decay(step_hint: int, hyperparameters):
         warmup_steps = int(hyperparameters.warmup_factor * step_hint)
         warmup_fn = optax.linear_schedule(
             init_value=0.0,
             end_value=hyperparameters.learning_rate,
             transition_steps=warmup_steps,
         )
-        cosine_steps = max(step_hint - warmup_steps, 1)
-        cosine_fn = optax.cosine_decay_schedule(
-            init_value=hyperparameters.learning_rate, decay_steps=cosine_steps
+        decay_steps = step_hint - warmup_steps
+        decay_fn = optax.linear_schedule(
+            init_value=hyperparameters.learning_rate,
+            end_value=0.0,
+            transition_steps=decay_steps,
         )
         schedule_fn = optax.join_schedules(
-            schedules=[warmup_fn, cosine_fn], boundaries=[warmup_steps]
+            schedules=[warmup_fn, decay_fn], boundaries=[warmup_steps]
         )
         return schedule_fn
 
-    # Create optimizer + LR schedule.
-    lr_schedule_fn = jax_cosine_warmup(workload.step_hint, hyperparameters)
+    step_hint = int(hyperparameters.step_hint_factor * workload.step_hint) if hasattr(hyperparameters, 'step_hint_factor') else workload.step_hint
+    lr_schedule_fn = linear_warmup_and_decay(step_hint, hyperparameters)
     opt_init_fn, opt_update_fn = kron(
         learning_rate=lr_schedule_fn,
-        b1=hyperparameters.b1,
+        b1=0.9,
         weight_decay=hyperparameters.weight_decay,
+        preconditioner_update_probability=precond_update_prob_schedule(flat_start=1000, min_prob=0.1),
         preconditioner_lr=hyperparameters.preconditioner_lr,
-        preconditioner_init_scale=hyperparameters.preconditioner_init_scale,
-        block_size=hyperparameters.block_size,
-        max_size_triangular=hyperparameters.max_size_triangular,
-        min_ndim_triangular=hyperparameters.min_ndim_triangular,
-        memory_save_mode=hyperparameters.memory_save_mode,
-        precond_update_precision=hyperparameters.precond_update_precision,
-        precond_grads_precision=hyperparameters.precond_grads_precision,
-        lax_map_scanned_layers=hyperparameters.lax_map_scanned_layers,
-        lax_map_batch_size=hyperparameters.lax_map_batch_size,
-        merge_small_dims=hyperparameters.merge_small_dims,
-        target_merged_dim_size=hyperparameters.target_merged_dim_size,
-        partition_grads_into_blocks=hyperparameters.partition_grads_into_blocks,
+        preconditioner_init_scale=1.0,
+        max_size_triangular=8192,
+        merge_small_dims=True,
+        target_merged_dim_size=4096,
+        partition_grads_into_blocks=True,
+        block_size=256,
     )
 
     params_zeros_like = jax.tree_map(
@@ -125,10 +121,10 @@ def pmapped_train_step(
 
     grad_norm = jnp.sqrt(sum(jnp.sum(g**2) for g in jax.tree_util.tree_leaves(grad)))
 
-    if grad_clip is not None:
-        grad_scaling_factor = grad_clip / (grad_norm + _GRAD_CLIP_EPS)
-        grad_scaling_factor = jax.lax.clamp(min=0.0, x=grad_scaling_factor, max=1.0)
-        grad = jax.tree_map(lambda x: x * grad_scaling_factor, grad)
+    # if grad_clip is not None:
+    #     grad_scaling_factor = grad_clip / (grad_norm + _GRAD_CLIP_EPS)
+    #     grad_scaling_factor = jax.lax.clamp(min=0.0, x=grad_scaling_factor, max=1.0)
+    #     grad = jax.tree_map(lambda x: x * grad_scaling_factor, grad)
 
     updates, new_optimizer_state = opt_update_fn(
         grad, optimizer_state, current_param_container

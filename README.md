@@ -152,6 +152,19 @@ url             = {https://openreview.net/forum?id=CtM5xjRSfm}
 ## TPU notes
 
 ```bash
+sudo apt update && sudo apt install -y python3.11 python3.11-venv python3.11-dev
+
+mkdir -p /home/evanatyourservice/algorithmic-efficiency/venv_py311
+
+python3.11 -m venv /home/evanatyourservice/algorithmic-efficiency/venv_py311
+
+source /home/evanatyourservice/algorithmic-efficiency/venv_py311/bin/activate
+
+pip install --upgrade pip setuptools wheel
+```
+
+```bash
+# baseline
 python3 submission_runner.py \
     --framework=jax \
     --workload=ogbg \
@@ -161,6 +174,20 @@ python3 submission_runner.py \
     --tuning_ruleset=external \
     --tuning_search_space=prize_qualification_baselines/external_tuning/tuning_search_space.json \
     --num_tuning_trials=5 \
+    --data_dir=/dev/shm/ogbg \
+    --save_checkpoints=false \
+    --use_wandb
+
+# kron
+python3 submission_runner.py \
+    --framework=jax \
+    --workload=ogbg \
+    --experiment_dir=/home/evanatyourservice/algorithmic-efficiency/experiments/kron \
+    --experiment_name=kron \
+    --submission_path=submissions/external_tuning/kron/submission.py \
+    --tuning_ruleset=external \
+    --tuning_search_space=submissions/external_tuning/kron/tuning_search_space_obgb.json \
+    --num_tuning_trials=1 \
     --data_dir=/dev/shm/ogbg \
     --save_checkpoints=false \
     --use_wandb

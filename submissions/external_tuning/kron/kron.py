@@ -1,3 +1,13 @@
+"""
+TODO to simplify things and specialize the optimizer for algoperf:
+- merge small dims
+- since layers aren't scanned in networks, find and stack same-shaped arrays after merging small dims
+- chunk like normal
+- merge leading dims (layers dim and partitions dim)
+- instead of FSDP style sharding, let's pad this leading dim to n_devices and do pipeline across it
+- this means we constrain grads to P('data'), then P(None) on the way out, opt state stays P('data') all the time
+"""
+
 from typing import Any, List, Optional, Union, Callable, Tuple
 from collections import defaultdict
 from functools import partial
