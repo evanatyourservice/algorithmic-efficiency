@@ -28,26 +28,8 @@ def init_optimizer_state(
     del model_state
     del rng
 
-    def linear_warmup_and_decay(step_hint: int, hyperparameters):
-        warmup_steps = int(hyperparameters.warmup_factor * step_hint)
-        warmup_fn = optax.linear_schedule(
-            init_value=0.0,
-            end_value=hyperparameters.learning_rate,
-            transition_steps=warmup_steps,
-        )
-        decay_steps = step_hint - warmup_steps
-        decay_fn = optax.linear_schedule(
-            init_value=hyperparameters.learning_rate,
-            end_value=0.0,
-            transition_steps=decay_steps,
-        )
-        schedule_fn = optax.join_schedules(
-            schedules=[warmup_fn, decay_fn], boundaries=[warmup_steps]
-        )
-        return schedule_fn
-
     step_hint = int(hyperparameters.step_hint_factor * workload.step_hint) if hasattr(hyperparameters, 'step_hint_factor') else workload.step_hint
-    lr_schedule_fn = linear_warmup_and_decay(step_hint, hyperparameters)
+    lr_schedule_fn = optax.linear_schedule(init_value=hyperparameters.learning_rate, end_value=0.0, transition_steps=step_hint)
     opt_init_fn, opt_update_fn = kron(
         learning_rate=lr_schedule_fn,
         b1=0.9,
