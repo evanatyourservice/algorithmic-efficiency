@@ -1,22 +1,33 @@
 {
     "learning_rate": {
-        "min": 3e-5, "max": 3e-3, "scaling": "log"
+        "min": 0.0002,
+        "max": 0.002,
+        "scaling": "log"
+    },
+    "weight_decay": {
+        "min": 0.0001,
+        "max": 1.0,
+        "scaling": "log"
+    },
+    "preconditioner_lr": {
+        "min": 0.3,
+        "max": 1.5,
+        "scaling": "linear"
+    },
+    "label_smoothing": {
+        "feasible_points": [0.0, 0.1, 0.2]
+    },
+    "dropout_rate": {
+        "feasible_points": [0.0, 0.1]
     },
     "b1": {
         "feasible_points": [0.9]
-    },
-    "weight_decay": {
-        "min": 0.01, "max": 1.0, "scaling": "log"
     },
     "flat_start": {
         "feasible_points": [500]
     },
     "min_prob": {
         "feasible_points": [0.03]
-    },
-    
-    "preconditioner_lr": {
-        "min": 0.1, "max": 1.0, "scaling": "linear"
     },
     "preconditioner_init_scale": {
         "feasible_points": [1.0]
@@ -26,12 +37,6 @@
     },
     "warmup_factor": {
         "feasible_points": [0.0]
-    },
-    "label_smoothing": {
-        "feasible_points": [0.0, 0.1, 0.2]
-    },
-    "dropout_rate": {
-        "feasible_points": [0.0, 0.1]
     },
     "grad_clip": {
         "feasible_points": [null]
