@@ -1,6 +1,5 @@
-from typing import Optional
-import os
-import time
+from typing import Optional, Dict
+import os, time, importlib, traceback
 from dataclasses import dataclass
 from types import MappingProxyType
 from inspect import signature
@@ -8,53 +7,73 @@ from datetime import datetime
 from absl import app, flags, logging
 import optuna
 from optuna.integration import WeightsAndBiasesCallback
+import tensorflow as tf
 
 from algoperf import spec
 from algoperf import random_utils as prng
-from algoperf.workloads import workloads
-
 from submissions.external_tuning.kron import submission
 
-
+tf.config.set_visible_devices([], "GPU")
 FLAGS = flags.FLAGS
 
 flags.DEFINE_enum(
-    'framework',
-    'jax',
-    enum_values=['jax', 'pytorch'],
-    help='Whether to use Jax or Pytorch for the submission.')
+    "framework", "jax", enum_values=["jax", "pytorch"], help="Framework for submission."
+)
+flags.DEFINE_string("data_dir", "~/data", "Path to the data directory")
 flags.DEFINE_string(
-    'workload',
-    'ogbg',
-    'Name of the workload to tune')
-flags.DEFINE_string(
-    'data_dir',
-    '/dev/shm/ogbg',
-    'Path to the data directory')
-flags.DEFINE_string(
-    'experiment_dir',
+    "experiment_dir",
     f"experiment_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-    'Experiment output directory')
-flags.DEFINE_float(
-    'step_hint_factor',
-    0.05,
-    'Fraction of step hint to use for tuning')
+    "Experiment output directory",
+)
+flags.DEFINE_integer("num_tuning_trials", 5, "Number of tuning trials")
 flags.DEFINE_integer(
-    'num_tuning_trials',
-    10,
-    'Number of tuning trials')
-flags.DEFINE_string(
-    'imagenet_v2_data_dir',
-    None,
-    'Dataset location for ImageNet-v2.')
-flags.DEFINE_integer(
-    'rng_seed',
-    42,
-    'Value of rng seed. If None, a random seed will be generated.')
-flags.DEFINE_boolean(
-    'use_wandb',
-    True,
-    'Whether to use Weights & Biases logging.')
+    "rng_seed", 42, "Value of rng seed. If None, a random seed will be generated."
+)
+flags.DEFINE_boolean("use_wandb", True, "Whether to use Weights & Biases logging.")
+
+WORKLOAD_CLASSES = {
+    "cifar": {
+        "module_name": "algoperf.workloads.cifar.cifar_jax.workload",
+        "class_name": "CifarWorkload",
+    },
+    "criteo1tb": {
+        "module_name": "algoperf.workloads.criteo1tb.criteo1tb_jax.workload",
+        "class_name": "Criteo1TbDlrmSmallWorkload",
+    },
+    "fastmri": {
+        "module_name": "algoperf.workloads.fastmri.fastmri_jax.workload",
+        "class_name": "FastMRIWorkload",
+    },
+    "imagenet_resnet": {
+        "module_name": "algoperf.workloads.imagenet_resnet.imagenet_jax.workload",
+        "class_name": "ImagenetResnetWorkload",
+    },
+    "imagenet_vit": {
+        "module_name": "algoperf.workloads.imagenet_vit.imagenet_jax.workload",
+        "class_name": "ImagenetVitWorkload",
+    },
+    "librispeech_conformer": {
+        "module_name": "algoperf.workloads.librispeech_conformer.librispeech_jax.workload",
+        "class_name": "LibriSpeechConformerWorkload",
+    },
+    "librispeech_deepspeech": {
+        "module_name": "algoperf.workloads.librispeech_deepspeech.librispeech_jax.workload",
+        "class_name": "LibriSpeechDeepSpeechWorkload",
+    },
+    "mnist": {
+        "module_name": "algoperf.workloads.mnist.mnist_jax.workload",
+        "class_name": "MnistWorkload",
+    },
+    "ogbg": {
+        "module_name": "algoperf.workloads.ogbg.ogbg_jax.workload",
+        "class_name": "OgbgWorkload",
+    },
+    "wmt": {
+        "module_name": "algoperf.workloads.wmt.wmt_jax.workload",
+        "class_name": "WmtWorkload",
+    },
+}
+
 
 @dataclass
 class Hyperparameters:
@@ -63,35 +82,25 @@ class Hyperparameters:
     preconditioner_lr: float = 0.5
     label_smoothing: float = 0.0
     dropout_rate: float = 0.0
-    b1: float = 0.9
-    flat_start: int = 1000
-    min_prob: float = 0.05
-    preconditioner_init_scale: float = 1.0
-    warmup_factor: float = 0.0
-    max_size_triangular: int = 8192
-    min_ndim_triangular: int = 2
-    memory_save_mode: Optional[bool] = "all_diag"
-    precond_update_precision: str = "tensorfloat32"
-    precond_grads_precision: Optional[str] = None
-    lax_map_scanned_layers: bool = False
-    lax_map_batch_size: int = 8
-    merge_small_dims: bool = True
-    target_merged_dim_size: int = 4096
-    partition_grads_into_blocks: bool = True
-    block_size: int = 256
 
 
 def get_tuned_hyperparameters(trial: optuna.Trial) -> Hyperparameters:
     return Hyperparameters(
-        learning_rate=trial.suggest_float('learning_rate', 0.0002, 0.002, log=True),
-        weight_decay=trial.suggest_float('weight_decay', 0.0001, 1.0, log=True),
-        preconditioner_lr=trial.suggest_float('preconditioner_lr', 0.3, 1.5),
-        label_smoothing=trial.suggest_float('label_smoothing', 0.0, 0.25),
-        dropout_rate=trial.suggest_float('dropout_rate', 0.0, 0.5),
+        learning_rate=trial.suggest_float("learning_rate", 0.0002, 0.002, log=True),
+        weight_decay=trial.suggest_float("weight_decay", 0.0001, 1.0, log=True),
+        preconditioner_lr=trial.suggest_float("preconditioner_lr", 0.3, 1.5),
+        label_smoothing=trial.suggest_float("label_smoothing", 0.0, 0.25),
+        dropout_rate=trial.suggest_float("dropout_rate", 0.0, 0.5),
     )
 
 
-workload_info = {
+WORKLOAD_INFO = {
+    "cifar": {
+        "metric_name": "accuracy",
+        "maximize": True,
+        "step_hint": 4883,
+        "target_metric_name": "accuracy",
+    },
     "criteo1tb": {
         "metric_name": "loss",
         "maximize": False,
@@ -101,72 +110,61 @@ workload_info = {
     "fastmri": {
         "metric_name": "ssim",
         "maximize": True,
-        "step_hint": 18_094,
+        "step_hint": 1000,
         "target_metric_name": "ssim",
     },
     "imagenet_resnet": {
         "metric_name": "accuracy",
         "maximize": True,
-        "step_hint": 195_999,
+        "step_hint": 24_541,
         "target_metric_name": "accuracy",
     },
     "imagenet_vit": {
         "metric_name": "accuracy",
         "maximize": True,
-        "step_hint": 167_999,
+        "step_hint": 24_541,
         "target_metric_name": "accuracy",
     },
     "librispeech_conformer": {
         "metric_name": "wer",
         "maximize": False,
-        "step_hint": 76_000,
+        "step_hint": 20_000,
         "target_metric_name": "wer",
     },
     "librispeech_deepspeech": {
         "metric_name": "wer",
         "maximize": False,
-        "step_hint": 38_400,
+        "step_hint": 20_000,
         "target_metric_name": "wer",
+    },
+    "mnist": {
+        "metric_name": "accuracy",
+        "maximize": True,
+        "step_hint": 109,
+        "target_metric_name": "accuracy",
     },
     "ogbg": {
         "metric_name": "mean_average_precision",
         "maximize": True,
-        "step_hint": 52_000,
+        "step_hint": 5_000,
         "target_metric_name": "mean_average_precision",
     },
     "wmt": {
         "metric_name": "bleu",
         "maximize": True,
-        "step_hint": 120_000,
+        "step_hint": 10_000,
         "target_metric_name": "bleu",
-    },
-    "mnist": {
-        "metric_name": "accuracy",
-        "maximize": True,
-        "step_hint": 7813,
-        "target_metric_name": "accuracy",
-    },
-    "cifar": {
-        "metric_name": "accuracy",
-        "maximize": True,
-        "step_hint": 4883,
-        "target_metric_name": "accuracy",
     },
 }
 
 
-def get_metric_value(result, metric_name):
-    # First try direct access
+def get_metric_value(result: Dict[str, float], metric_name: str) -> float:
     if metric_name in result:
         return result[metric_name]
-    # Fallback to checking validation split
-    if f'validation/{metric_name}' in result:
-        return result[f'validation/{metric_name}']
-    # If still not found, show available keys
-    available_keys = ', '.join(result.keys())
+    if f"validation/{metric_name}" in result:
+        return result[f"validation/{metric_name}"]
     raise KeyError(
-        f"Metric '{metric_name}' not found in evaluation results. "
-        f"Available keys: {available_keys}"
+        f"Metric '{metric_name}' not found in evaluation results. Available keys: {', '.join(result.keys())}"
     )
 
 
@@ -181,241 +179,189 @@ def train_once(
     trial: Optional[optuna.Trial] = None,
     eval_frequency: int = 500,
 ) -> float:
-    rng = prng.PRNGKey(rng_seed)
-    data_rng, opt_init_rng, model_init_rng, rng = prng.split(rng, 4)
-
-    logging.info("Initializing dataset")
+    data_rng, opt_init_rng, model_init_rng, train_rng = prng.split(
+        prng.PRNGKey(rng_seed), 4
+    )
     train_input_queue = workload._build_input_queue(
         data_rng=data_rng,
         split="train",
         data_dir=data_dir,
         global_batch_size=global_batch_size,
     )
-    
-    num_train_examples = workload.num_train_examples
-    num_eval_train_examples = workload.num_eval_train_examples
-    num_validation_examples = workload.num_validation_examples
-    num_test_examples = workload.num_test_examples
     eval_batch_size = workload.eval_batch_size
 
-    logging.info("Initializing model")
-    model_params, model_state = workload.init_model_fn(model_init_rng)
-    
-    logging.info("Initializing optimizer")
+    try:
+        model_params, model_state = workload.init_model_fn(
+            model_init_rng,
+            dropout_rate=getattr(hyperparameters, "dropout_rate", 0.0),
+            aux_dropout_rate=getattr(hyperparameters, "aux_dropout_rate", 0.0),
+        )
+    except Exception as e:
+        logging.error(f"Model initialization failed: {str(e)}")
+        raise
+
     optimizer_state = submission.init_optimizer_state(
         workload, model_params, model_state, hyperparameters, opt_init_rng
     )
-    
     update_fn = submission.update_params
-    prepare_for_eval = getattr(submission, 'prepare_for_eval', None)
-    needs_train_state = 'train_state' in signature(update_fn).parameters
+    needs_train_state = "train_state" in signature(update_fn).parameters
 
     train_state = {
-        'validation_goal_reached': False,
-        'test_goal_reached': False,
-        'is_time_remaining': True,
-        'last_eval_time': 0,
-        'training_complete': False,
-        'accumulated_submission_time': 0,
-        'accumulated_eval_time': 0,
-        'accumulated_logging_time': 0,
-        'last_step_end_time': time.time(),
+        "validation_goal_reached": False,
+        "test_goal_reached": False,
+        "is_time_remaining": True,
+        "last_eval_time": 0,
+        "training_complete": False,
+        "accumulated_submission_time": 0,
+        "accumulated_eval_time": 0,
+        "accumulated_logging_time": 0,
+        "last_step_end_time": None,
     }
-    
-    eval_results = []
-    global_step = 0
-    running_loss = 0.0
-    running_loss_count = 0
-    best_metric_value = float('-inf') if workload_info[workload_name]["maximize"] else float('inf')
+    step_rng, global_step, eval_results, latest_eval_metrics = train_rng, 0, [], None
+    global_start_time = train_state["last_step_end_time"] = last_log_time = time.time()
 
-    logging.info("Starting training!")
-    while global_step < max_global_steps and not train_state['training_complete']:
-        step_rng = prng.fold_in(rng, global_step)
-        data_select_rng, update_rng, prep_eval_rng, eval_rng = prng.split(step_rng, 4)
-        
-        try:
-            batch = next(train_input_queue)
-        except StopIteration:
-            logging.info("Rebuilding train input queue")
-            data_rng = prng.fold_in(data_rng, global_step)
-            train_input_queue = workload._build_input_queue(
-                data_rng=data_rng,
-                split="train",
-                data_dir=data_dir,
-                global_batch_size=global_batch_size,
+    while global_step < max_global_steps and not train_state["training_complete"]:
+        step_rng = prng.fold_in(train_rng, global_step)
+        update_rng = prng.fold_in(step_rng, 1)
+        current_time = time.time()
+
+        if current_time - last_log_time > 10:
+            logging.info(
+                f"Step {global_step}/{max_global_steps} - {(global_step/max_global_steps)*100:.1f}%"
             )
-            batch = next(train_input_queue)
+            last_log_time = current_time
+
+        if (
+            global_step > 10
+            and (current_time - global_start_time) / max(1, global_step) > 60
+        ):
+            logging.warning("Training is taking too long per step, aborting!")
+            break
 
         try:
-            update_start_time = time.time()
-            update_kwargs = {
-                'workload': workload,
-                'current_param_container': model_params,
-                'current_params_types': workload.model_params_types,
-                'model_state': model_state,
-                'hyperparameters': hyperparameters,
-                'batch': batch,
-                'loss_type': workload.loss_type,
-                'optimizer_state': optimizer_state,
-                'eval_results': eval_results,
-                'global_step': global_step,
-                'rng': update_rng,
-            }
-            if needs_train_state:
-                update_kwargs['train_state'] = MappingProxyType(train_state)
-            
-            optimizer_state, model_params, model_state = update_fn(**update_kwargs)
-            
+            batch_start_time = time.time()
             try:
-                if hasattr(batch, 'get') and 'targets' in batch:
-                    loss = float(workload.loss_fn(model_params, model_state, batch['inputs'], batch['targets'], hyperparameters))
-                    running_loss += loss
-                    running_loss_count += 1
-            except Exception as e:
-                logging.warning(f"Could not extract loss: {str(e)}")
-                
-        except spec.TrainingCompleteError:
-            train_state['training_complete'] = True
-            break
-            
+                batch = next(train_input_queue)
+                if time.time() - batch_start_time > 60:
+                    logging.warning("Batch loading took more than 60 seconds")
+            except StopIteration:
+                train_input_queue = workload._build_input_queue(
+                    data_rng=prng.fold_in(data_rng, global_step),
+                    split="train",
+                    data_dir=data_dir,
+                    global_batch_size=global_batch_size,
+                )
+                continue
+            except Exception:
+                if time.time() - batch_start_time > 120:
+                    logging.error("Batch loading timed out, stopping training")
+                    break
+                continue
+
+            update_kwargs = {
+                "workload": workload,
+                "current_param_container": model_params,
+                "current_params_types": workload.model_params_types,
+                "model_state": model_state,
+                "hyperparameters": hyperparameters,
+                "batch": batch,
+                "loss_type": workload.loss_type,
+                "optimizer_state": optimizer_state,
+                "eval_results": eval_results,
+                "global_step": global_step,
+                "rng": update_rng,
+            }
+
+            if needs_train_state:
+                update_kwargs["train_state"] = MappingProxyType(train_state)
+
+            optimizer_state, model_params, model_state = update_fn(**update_kwargs)
+        except Exception as e:
+            logging.error(f"Error in training step: {str(e)}")
+            global_step += 1
+            continue
+
         global_step += 1
-        step_end_time = time.time()
-        step_duration = step_end_time - train_state['last_step_end_time']
-        train_state['accumulated_submission_time'] += step_duration
-        train_state['last_step_end_time'] = step_end_time
-        
-        if global_step % 100 == 0:
-            avg_loss = running_loss / max(running_loss_count, 1)
-            elapsed_time = train_state['accumulated_submission_time']
-            steps_per_sec = global_step / max(elapsed_time, 1)
-            
+        current_time = time.time()
+        train_state["accumulated_submission_time"] += (
+            current_time - train_state["last_step_end_time"]
+        )
+        train_state["last_step_end_time"] = current_time
+
+        if global_step % 20 == 0:
+            steps_per_sec = global_step / max(
+                train_state["accumulated_submission_time"], 1
+            )
             logging.info(
                 f"Step {global_step}/{max_global_steps} | "
-                f"Time: {elapsed_time:.1f}s | "
-                f"Loss: {avg_loss:.6f} | "
+                f"Time: {train_state['accumulated_submission_time']:.1f}s | "
                 f"Speed: {steps_per_sec:.1f} steps/s"
             )
-            running_loss = 0.0
-            running_loss_count = 0
-        
-        if trial is not None and global_step % eval_frequency == 0:
-            logging.info(f"Performing intermediate evaluation at step {global_step}")
-            eval_start_time = time.time()
-            
-            if prepare_for_eval is not None:
-                logging.info("Preparing for evaluation")
-                optimizer_state, model_params, model_state = prepare_for_eval(
-                    workload=workload,
-                    current_param_container=model_params,
-                    current_params_types=workload.model_params_types,
-                    model_state=model_state,
-                    hyperparameters=hyperparameters,
-                    loss_type=workload.loss_type,
-                    optimizer_state=optimizer_state,
-                    eval_results=eval_results,
-                    global_step=global_step,
-                    rng=prep_eval_rng,
-                )
-            
-            validation_result = workload.eval_model(
-                eval_batch_size,
-                model_params,
-                model_state,
-                eval_rng,
-                data_dir,
-                FLAGS.imagenet_v2_data_dir,
-                global_step,
-            )
-            
-            eval_end_time = time.time()
-            train_state['accumulated_eval_time'] += (eval_end_time - eval_start_time)
-            
-            metric_name = workload_info[workload_name]["metric_name"]
+
+        if (global_step % eval_frequency == 0) or (global_step == max_global_steps):
             try:
-                metric_value = get_metric_value(validation_result, metric_name)
-            except KeyError as e:
-                logging.error(f"Metric extraction failed: {str(e)}")
-                metric_value = float('-inf') if workload_info[workload_name]["maximize"] else float('inf')
-            
-            trial.report(metric_value, global_step)
-            
-            if trial.should_prune():
-                logging.info(f"Trial pruned at step {global_step} with value: {metric_value}")
-                raise optuna.exceptions.TrialPruned()
-            
-            logging.info(f"Intermediate eval @ step {global_step}:")
-            logging.info(f"  {metric_name}: {metric_value:.4f}")
-            
-            is_better = metric_value > best_metric_value if workload_info[workload_name]["maximize"] else metric_value < best_metric_value
-            if is_better:
-                best_metric_value = metric_value
-                logging.info("  New best!")
-            
-            eval_results.append((global_step, validation_result))
+                eval_start_time = time.time()
+                eval_metrics = workload.eval_model(
+                    eval_batch_size,
+                    model_params,
+                    model_state,
+                    prng.fold_in(step_rng, global_step),
+                    data_dir,
+                    None,
+                    global_step,
+                )
+                train_state["accumulated_eval_time"] += time.time() - eval_start_time
 
-    if prepare_for_eval is not None:
-        logging.info("Preparing for final evaluation")
-        eval_prep_start_time = time.time()
-        optimizer_state, model_params, model_state = prepare_for_eval(
-            workload=workload,
-            current_param_container=model_params,
-            current_params_types=workload.model_params_types,
-            model_state=model_state,
-            hyperparameters=hyperparameters,
-            loss_type=workload.loss_type,
-            optimizer_state=optimizer_state,
-            eval_results=eval_results,
-            global_step=global_step,
-            rng=prep_eval_rng,
-        )
-        eval_prep_end_time = time.time()
-        train_state['accumulated_submission_time'] += (eval_prep_end_time - eval_prep_start_time)
-    
-    logging.info("Running final evaluation")
-    eval_start_time = time.time()
-    validation_result = workload.eval_model(
-        eval_batch_size,
-        model_params,
-        model_state,
-        eval_rng,
-        data_dir,
-        FLAGS.imagenet_v2_data_dir,
-        global_step,
-    )
-    eval_end_time = time.time()
-    train_state['accumulated_eval_time'] += (eval_end_time - eval_start_time)
-    
-    metric_name = workload_info[workload_name]["metric_name"]
-    try:
-        metric_value = get_metric_value(validation_result, metric_name)
-    except KeyError as e:
-        logging.error(f"Metric extraction failed: {str(e)}")
-        metric_value = float('-inf') if workload_info[workload_name]["maximize"] else float('inf')
-    
-    logging.info(f"Training completed in {train_state['accumulated_submission_time']:.1f}s")
-    logging.info(f"Final {metric_name}: {metric_value:.4f}")
+                metric_name = WORKLOAD_INFO[workload_name]["metric_name"]
+                validation_metric = eval_metrics.get(f"validation/{metric_name}")
+                test_metric = eval_metrics.get(f"test/{metric_name}")
 
-    return metric_value
+                if validation_metric is not None:
+                    logging.info(f"Validation {metric_name}: {validation_metric:.6f}")
+                if test_metric is not None:
+                    logging.info(f"Test {metric_name}: {test_metric:.6f}")
+
+                train_state.update(
+                    {
+                        "validation_goal_reached": workload.has_reached_validation_target(
+                            eval_metrics
+                        ),
+                        "test_goal_reached": workload.has_reached_test_target(
+                            eval_metrics
+                        ),
+                    }
+                )
+                latest_eval_metrics = eval_metrics
+                eval_results.append((global_step, eval_metrics))
+
+                if trial is not None and validation_metric is not None:
+                    trial.report(validation_metric, global_step)
+                    if trial.should_prune():
+                        raise optuna.exceptions.TrialPruned()
+            except Exception as e:
+                logging.error(f"Error during evaluation: {str(e)}")
+
+    if latest_eval_metrics:
+        try:
+            return get_metric_value(
+                latest_eval_metrics, WORKLOAD_INFO[workload_name]["metric_name"]
+            )
+        except Exception as e:
+            logging.error(f"Error extracting metric: {str(e)}")
+    return float("-inf") if WORKLOAD_INFO[workload_name]["maximize"] else float("inf")
 
 
 def objective(
-    trial: optuna.Trial,
-    workload: spec.Workload,
-    workload_name: str,
-    data_dir: str,
-    step_hint_factor: float,
+    trial: optuna.Trial, workload: spec.Workload, workload_name: str, data_dir: str
 ) -> float:
     hyperparameters = get_tuned_hyperparameters(trial)
-    max_steps = int(workload_info[workload_name]["step_hint"] * step_hint_factor)
-    seed = FLAGS.rng_seed
-    
-    logging.info(f"\nStarting trial with hyperparameters:")
-    for key, value in trial.params.items():
-        logging.info(f"  {key}: {value}")
-    
-    eval_frequency = max(500, max_steps // 3)  
-    logging.info(f"Will evaluate at steps: {[eval_frequency, 2*eval_frequency, max_steps]}")
-    
+    max_steps = min(
+        WORKLOAD_INFO[workload_name]["step_hint"],
+        1000 if trial.number < 2 else WORKLOAD_INFO[workload_name]["step_hint"],
+    )
+    eval_frequency = min(500, max(100, max_steps // 5))
+    start_time = time.time()
+
     try:
         metric_value = train_once(
             workload,
@@ -423,93 +369,87 @@ def objective(
             submission.get_batch_size(workload_name),
             data_dir,
             hyperparameters,
-            seed,
+            FLAGS.rng_seed,
             max_global_steps=max_steps,
             trial=trial,
-            eval_frequency=eval_frequency
+            eval_frequency=eval_frequency,
         )
-        
-        logging.info(f"Trial completed with {workload_info[workload_name]['metric_name']}: {metric_value}")
+        logging.info(
+            f"Trial completed in {time.time() - start_time:.1f}s with "
+            f"{WORKLOAD_INFO[workload_name]['metric_name']}: {metric_value}"
+        )
         return metric_value
     except optuna.exceptions.TrialPruned:
-        logging.info("Trial was pruned by Optuna")
         raise
     except Exception as e:
         logging.error(f"Error during trial: {str(e)}")
-        import traceback
         traceback.print_exc()
-        return float('-inf') if workload_info[workload_name]["maximize"] else float('inf')
+        return (
+            float("-inf") if WORKLOAD_INFO[workload_name]["maximize"] else float("inf")
+        )
+    finally:
+        if time.time() - start_time > 3600:
+            logging.warning("Trial exceeded time limit of 3600s")
 
 
 def main(_):
-    logging.info(f"\n🚀 Starting tuning with settings:")
-    logging.info(f"   Workload: {FLAGS.workload}")
-    logging.info(f"   Data dir: {FLAGS.data_dir}")
-    logging.info(f"   Output dir: {FLAGS.experiment_dir}")
-    logging.info(f"   Step hint factor: {FLAGS.step_hint_factor}")
-    logging.info(f"   Trials: {FLAGS.num_tuning_trials}\n")
-
     os.makedirs(FLAGS.experiment_dir, exist_ok=True)
+    data_dir = os.path.expanduser(FLAGS.data_dir)
+    workload_name, num_trials = "ogbg", min(FLAGS.num_tuning_trials, 3)
 
-    if FLAGS.workload not in workload_info:
-        raise ValueError(f"❌ Unknown workload: {FLAGS.workload}")
+    module = importlib.import_module(WORKLOAD_CLASSES[workload_name]["module_name"])
+    workload = getattr(module, WORKLOAD_CLASSES[workload_name]["class_name"])()
 
-    if FLAGS.workload not in workloads.WORKLOADS:
-        raise ValueError(f"Workload {FLAGS.workload} not found in workloads.WORKLOADS")
-    workload_metadata = workloads.WORKLOADS[FLAGS.workload]
-    workload_path = os.path.join(
-        workloads.BASE_WORKLOADS_DIR,
-        workload_metadata['workload_path'] + '_jax',
-        'workload.py'
-    )
-    workload_init_kwargs = {}
-    workload = workloads.import_workload(
-        workload_path=workload_path,
-        workload_class_name=workload_metadata['workload_class_name'],
-        workload_init_kwargs=workload_init_kwargs
-    )
-    logging.info(f"✅ Loaded {FLAGS.workload} workload\n")
-
-    study_name = f"kron_tuning_{FLAGS.workload}"
     study = optuna.create_study(
-        study_name=study_name,
-        direction="maximize" if workload_info[FLAGS.workload]["maximize"] else "minimize",
-        sampler=optuna.samplers.TPESampler(n_startup_trials=10, multivariate=True),
-        pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=200),
-        load_if_exists=True,
+        study_name="ogbg_tuning",
+        direction="maximize",
+        sampler=optuna.samplers.TPESampler(n_startup_trials=1, multivariate=True),
+        pruner=optuna.pruners.MedianPruner(n_startup_trials=1, n_warmup_steps=200),
     )
 
-    wandb_callback = None
+    callbacks = []
     if FLAGS.use_wandb:
-        wandb_callback = WeightsAndBiasesCallback(
-            metric_name=workload_info[FLAGS.workload]["target_metric_name"],
-            wandb_kwargs={
-                "project": f"algoperf-{FLAGS.workload}",
-                "config": {
-                    "workload": FLAGS.workload,
-                    "step_hint_factor": FLAGS.step_hint_factor,
-                    "num_trials": FLAGS.num_tuning_trials,
-                    "rng_seed": FLAGS.rng_seed,
+        callbacks.append(
+            WeightsAndBiasesCallback(
+                metric_name=WORKLOAD_INFO[workload_name]["target_metric_name"],
+                wandb_kwargs={
+                    "project": "algoperf-ogbg",
+                    "config": {
+                        "num_trials": num_trials,
+                        "rng_seed": FLAGS.rng_seed,
+                        "max_steps": WORKLOAD_INFO[workload_name]["step_hint"],
+                    },
+                    "tags": ["kron", "ogbg"],
+                    "reinit": True,
                 },
-                "tags": ["kron", "tpu", FLAGS.workload],
-                "reinit": True,
-            },
+            )
         )
 
-    callbacks = [wandb_callback] if wandb_callback else []
-    
-    study.optimize(
-        lambda t: objective(t, workload, FLAGS.workload, FLAGS.data_dir, FLAGS.step_hint_factor),
-        n_trials=FLAGS.num_tuning_trials,
-        callbacks=callbacks,
-        gc_after_trial=True,
-    )
+    try:
+        study.optimize(
+            lambda trial: objective(
+                trial=trial,
+                workload=workload,
+                workload_name=workload_name,
+                data_dir=data_dir,
+            ),
+            n_trials=num_trials,
+            callbacks=callbacks,
+            gc_after_trial=True,
+            timeout=7200,
+        )
+    except KeyboardInterrupt:
+        logging.info("Study interrupted by user")
+    except Exception as e:
+        logging.error(f"Study failed: {str(e)}")
+        traceback.print_exc()
 
-    logging.info("Best trial:")
-    logging.info(f"  Value: {study.best_trial.value}")
-    logging.info("  Params: ")
-    for key, value in study.best_trial.params.items():
-        logging.info(f"    {key}: {value}")
+    if study.best_trial:
+        logging.info(f"\nBest trial:\n  Value: {study.best_trial.value}\n  Params:")
+        for k, v in study.best_trial.params.items():
+            logging.info(f"    {k}: {v}")
+    else:
+        logging.warning("No successful trials completed")
 
 
 if __name__ == "__main__":
