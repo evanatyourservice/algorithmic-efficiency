@@ -163,13 +163,13 @@ Create a TPU queued-resource that
 by running:
 
 ```bash
-bash create_tpu.sh  --node-name node-1 --data-disk dev-evan-1
+bash create_tpu.sh --node-name node-2 --data-disk dev-evan-1
 ```
 
 Wait a bit for install to finish (could watch CPU usage through GCP), then run a workload on the new TPU by running from your machine:
 
 ```bash
-run_workload.sh --tpu-vm=TPU_VM_NAME --workload=ogbg --wandb-key=YOUR_WANDB_API_KEY
+bash run_workload.sh --tpu-vm node-1 --workload ogbg --wandb-key YOUR_WANDB_API_KEY
 ```
 
 ### Run your submission on a workload

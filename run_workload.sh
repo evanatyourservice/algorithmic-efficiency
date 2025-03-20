@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Example usage:
-# ./run_workload.sh --tpu-vm=node-1 --workload=fastmri
-# ./run_workload.sh --tpu-vm=node-1 --workload=ogbg --wandb-key=YOUR_WANDB_API_KEY
+# ./run_workload.sh -t node-1 -w fastmri
+# ./run_workload.sh -t node-1 -w ogbg -k YOUR_WANDB_API_KEY
 #
 # Available workloads:
 # - fastmri                  : FastMRI medical image reconstruction
@@ -18,25 +18,30 @@ TPU_VM_NAME=""
 WANDB_API_KEY=""
 WORKLOAD=""
 
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    --tpu-vm=*)
-      TPU_VM_NAME="${1#*=}"
-      shift
+# Display usage information
+usage() {
+  echo "Usage: $0 [-t|--tpu-vm TPU_VM_NAME] [-w|--workload WORKLOAD_NAME] [-k|--wandb-key WANDB_API_KEY]"
+  echo "Available workloads: fastmri, imagenet_resnet, imagenet_vit, ogbg, criteo1tb, librispeech_conformer, librispeech_deepspeech, wmt"
+  exit 1
+}
+
+# Parse command line arguments
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -t|--tpu-vm)
+      TPU_VM_NAME="$2"
+      shift 2
       ;;
-    --wandb-key=*)
-      WANDB_API_KEY="${1#*=}"
-      shift
+    -k|--wandb-key)
+      WANDB_API_KEY="$2"
+      shift 2
       ;;
-    --workload=*)
-      WORKLOAD="${1#*=}"
-      shift
+    -w|--workload)
+      WORKLOAD="$2"
+      shift 2
       ;;
     *)
-      echo "Unknown option: $1"
-      echo "Usage: $0 --tpu-vm=TPU_VM_NAME --workload=WORKLOAD_NAME [--wandb-key=WANDB_API_KEY]"
-      echo "Available workloads: fastmri, imagenet_resnet, imagenet_vit, ogbg, criteo1tb, librispeech_conformer, librispeech_deepspeech, wmt"
-      exit 1
+      usage
       ;;
   esac
 done
@@ -44,16 +49,13 @@ done
 # required tpu vm name
 if [ -z "$TPU_VM_NAME" ]; then
     echo "Error: TPU VM name is required"
-    echo "Usage: $0 --tpu-vm=TPU_VM_NAME --workload=WORKLOAD_NAME [--wandb-key=WANDB_API_KEY]"
-    exit 1
+    usage
 fi
 
 # required workload
 if [ -z "$WORKLOAD" ]; then
     echo "Error: Workload name is required"
-    echo "Usage: $0 --tpu-vm=TPU_VM_NAME --workload=WORKLOAD_NAME [--wandb-key=WANDB_API_KEY]"
-    echo "Available workloads: fastmri, imagenet_resnet, imagenet_vit, ogbg, criteo1tb, librispeech_conformer, librispeech_deepspeech, wmt"
-    exit 1
+    usage
 fi
 
 # optional wandb key

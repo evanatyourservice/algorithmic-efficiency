@@ -118,10 +118,10 @@ jax_gpu = [
   "algoperf[jax_core_deps]",
 ]
 jax_tpu = [
-  "jax[tpu]==0.5.2",
-  "jaxlib[tpu]==0.5.1",
-  "optax==0.2.4",
-  "flax==0.8.4",
+  "jax[tpu]",
+  "jaxlib[tpu]",
+  "optax",
+  "flax",
   "algoperf[jax_core_deps]",
 ]
 pytorch_cpu = ["torch==2.5.1", "torchvision==0.20.1"]

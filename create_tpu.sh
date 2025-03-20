@@ -2,27 +2,29 @@
 
 # Example usage:
 # ./create_tpu.sh
-# ./create_tpu.sh --node-name=my-tpu
-# ./create_tpu.sh --data-disk=my-data-disk
-# ./create_tpu.sh --node-name=my-tpu --data-disk=my-data-disk
+# ./create_tpu.sh -n node-1 -d dev-evan-1
 
 NODE_NAME="node-1"
 DATA_DISK="dev-evan-1"
 
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    --node-name=*)
-      NODE_NAME="${1#*=}"
-      shift
+usage() {
+  echo "Usage: $0 [-n|--node-name NODE_NAME] [-d|--data-disk DISK_NAME]"
+  exit 1
+}
+
+# Parse command line arguments
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -n|--node-name)
+      NODE_NAME="$2"
+      shift 2
       ;;
-    --data-disk=*)
-      DATA_DISK="${1#*=}"
-      shift
+    -d|--data-disk)
+      DATA_DISK="$2"
+      shift 2
       ;;
     *)
-      echo "Unknown option: $1"
-      echo "Usage: $0 [--node-name=NAME] [--data-disk=DISK_NAME]"
-      exit 1
+      usage
       ;;
   esac
 done
