@@ -61,46 +61,10 @@ if [ -z "$WORKLOAD" ]; then
     usage
 fi
 
-# optional wandb key
+WANDB_KEY_PARAM=""
 if [ -n "$WANDB_API_KEY" ]; then
-    WANDB_CMD="export WANDB_API_KEY=$WANDB_API_KEY"
-    USE_WANDB_FLAG="--use_wandb"
-else
-    WANDB_CMD=""
-    USE_WANDB_FLAG=""
+    WANDB_KEY_PARAM="$WANDB_API_KEY"
 fi
 
-declare -A WORKLOAD_COMMANDS
-WORKLOAD_COMMANDS[fastmri]="python submission_runner.py --framework=jax --workload=fastmri --submission_path=prize_qualification_baselines/external_tuning/jax_nadamw_full_budget.py --data_dir=/mnt/disks/persist/algoperf_data/fastmri --num_tuning_trials=1 --experiment_dir=experiment_runs --experiment_name=tests/regression_tests/adamw --overwrite=True --save_checkpoints=False --tuning_ruleset=external --tuning_search_space=prize_qualification_baselines/external_tuning/tuning_search_space.json $USE_WANDB_FLAG 2>&1 | tee -a fastmri.log"
-WORKLOAD_COMMANDS[imagenet_resnet]="python submission_runner.py --framework=jax --workload=imagenet_resnet --submission_path=prize_qualification_baselines/external_tuning/jax_nadamw_full_budget.py --data_dir=/mnt/disks/persist/algoperf_data/imagenet/jax --num_tuning_trials=1 --experiment_dir=experiment_runs --experiment_name=tests/regression_tests/adamw --overwrite=True --save_checkpoints=False --imagenet_v2_data_dir=/data/imagenet/jax --tuning_ruleset=external --tuning_search_space=prize_qualification_baselines/external_tuning/tuning_search_space.json $USE_WANDB_FLAG 2>&1 | tee -a imagenet_resnet.log"
-WORKLOAD_COMMANDS[imagenet_vit]="python submission_runner.py --framework=jax --workload=imagenet_vit --submission_path=prize_qualification_baselines/external_tuning/jax_nadamw_full_budget.py --data_dir=/mnt/disks/persist/algoperf_data/imagenet/jax --num_tuning_trials=1 --experiment_dir=experiment_runs --experiment_name=tests/regression_tests/adamw --overwrite=True --save_checkpoints=False --imagenet_v2_data_dir=/data/imagenet/jax --tuning_ruleset=external --tuning_search_space=prize_qualification_baselines/external_tuning/tuning_search_space.json $USE_WANDB_FLAG 2>&1 | tee -a imagenet_vit.log"
-WORKLOAD_COMMANDS[ogbg]="python submission_runner.py --framework=jax --workload=ogbg --submission_path=prize_qualification_baselines/external_tuning/jax_nadamw_full_budget.py --data_dir=/mnt/disks/persist/algoperf_data/ogbg --num_tuning_trials=1 --experiment_dir=experiment_runs --experiment_name=tests/regression_tests/adamw --overwrite=True --save_checkpoints=False --tuning_ruleset=external --tuning_search_space=prize_qualification_baselines/external_tuning/tuning_search_space.json $USE_WANDB_FLAG 2>&1 | tee -a ogbg.log"
-WORKLOAD_COMMANDS[criteo1tb]="python submission_runner.py --framework=jax --workload=criteo1tb --submission_path=prize_qualification_baselines/external_tuning/jax_nadamw_full_budget.py --data_dir=/mnt/disks/persist/algoperf_data/criteo1tb --num_tuning_trials=1 --experiment_dir=experiment_runs --experiment_name=tests/regression_tests/adamw --overwrite=True --save_checkpoints=False --tuning_ruleset=external --tuning_search_space=prize_qualification_baselines/external_tuning/tuning_search_space.json $USE_WANDB_FLAG 2>&1 | tee -a criteo1tb.log"
-WORKLOAD_COMMANDS[librispeech_conformer]="python submission_runner.py --framework=jax --workload=librispeech_conformer --submission_path=prize_qualification_baselines/external_tuning/jax_nadamw_full_budget.py --data_dir=/mnt/disks/persist/algoperf_data/librispeech --num_tuning_trials=1 --experiment_dir=experiment_runs --experiment_name=tests/regression_tests/adamw --overwrite=True --save_checkpoints=False --librispeech_tokenizer_vocab_path=/data/librispeech/spm_model.vocab --tuning_ruleset=external --tuning_search_space=prize_qualification_baselines/external_tuning/tuning_search_space.json $USE_WANDB_FLAG 2>&1 | tee -a conformer.log"
-WORKLOAD_COMMANDS[librispeech_deepspeech]="python submission_runner.py --framework=jax --workload=librispeech_deepspeech --submission_path=prize_qualification_baselines/external_tuning/jax_nadamw_full_budget.py --data_dir=/mnt/disks/persist/algoperf_data/librispeech --num_tuning_trials=1 --experiment_dir=experiment_runs --experiment_name=tests/regression_tests/adamw --overwrite=True --save_checkpoints=False --librispeech_tokenizer_vocab_path=/data/librispeech/spm_model.vocab --tuning_ruleset=external --tuning_search_space=prize_qualification_baselines/external_tuning/tuning_search_space.json $USE_WANDB_FLAG 2>&1 | tee -a deepspeech.log"
-WORKLOAD_COMMANDS[wmt]="python submission_runner.py --framework=jax --workload=wmt --submission_path=prize_qualification_baselines/external_tuning/jax_nadamw_full_budget.py --data_dir=/mnt/disks/persist/algoperf_data/wmt --num_tuning_trials=1 --experiment_dir=experiment_runs --experiment_name=tests/regression_tests/adamw --overwrite=True --save_checkpoints=False --tuning_ruleset=external --tuning_search_space=prize_qualification_baselines/external_tuning/tuning_search_space.json $USE_WANDB_FLAG 2>&1 | tee -a wmt.log"
-
-# workload
-if [[ -v WORKLOAD_COMMANDS[$WORKLOAD] ]]; then
-  COMMAND="${WORKLOAD_COMMANDS[$WORKLOAD]}"
-else
-  echo "Error: Unknown workload '$WORKLOAD'"
-  echo "Available workloads: fastmri, imagenet_resnet, imagenet_vit, ogbg, criteo1tb, librispeech_conformer, librispeech_deepspeech, wmt"
-  exit 1
-fi
-
-REMOTE_COMMAND=$(cat <<END_COMMAND
-bash -c "
-  $WANDB_CMD
-  export LIBTPU_INIT_ARGS=\"--xla_enable_async_all_gather=true\"
-  cd /algorithmic-efficiency
-  source venv_py311/bin/activate && sudo -E nohup $COMMAND &
-  PID=\$!
-  echo 'Background process started with PID '\$PID
-  disown \$PID
-  exit
-"
-END_COMMAND
-)
-
-gcloud compute tpus tpu-vm ssh --zone "us-central2-b" "$TPU_VM_NAME" --project "mlcommons-algoperf" --worker=all --command "$REMOTE_COMMAND"
+echo "Starting workload $WORKLOAD on TPU VM $TPU_VM_NAME..."
+gcloud compute tpus tpu-vm ssh --zone "us-central2-b" "$TPU_VM_NAME" --project "mlcommons-algoperf" --worker=all --command "cd /algorithmic-efficiency && nohup /algorithmic-efficiency/_run_workload.sh $WORKLOAD $WANDB_KEY_PARAM > $WORKLOAD.log 2>&1 & echo \"Background process started with PID \$!\"; disown"
