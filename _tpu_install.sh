@@ -26,12 +26,17 @@ pip3 install -e '.[jax_tpu]'
 pip3 install -e '.[full]'
 pip3 install wandb
 
-# mount attached disk to /mnt/disks/persist, create data dir, and change permissions
-sudo mkdir -p /mnt/disks/persist && \
-sudo mount -o discard,defaults /dev/sdb /mnt/disks/persist && \
-sudo mkdir -p /mnt/disks/persist/algoperf_data && \
-sudo chown -R $(whoami):$(whoami) /mnt/disks/persist/algoperf_data && \
-sudo chmod -R 775 /mnt/disks/persist/algoperf_data
+# mount attached disk (read-only)
+sudo mkdir -p /mnt/disks/persist
+sudo umount /mnt/disks/persist || true
+sudo fsck -n /dev/sdb
+sudo mount -t ext4 -o ro,noload /dev/sdb /mnt/disks/persist
+if [ -d /mnt/disks/persist/algoperf_data ]; then
+  echo "Directory /mnt/disks/persist/algoperf_data exists. Contents:"
+  ls -l /mnt/disks/persist/algoperf_data
+else
+  echo "Directory /mnt/disks/persist/algoperf_data does not exist."
+fi
 
 echo "Setup completed successfully!"
 
