@@ -169,7 +169,7 @@ bash create_tpu.sh --node-name node-2 --data-disk dev-evan-1
 Wait a bit for install to finish (could watch CPU usage through GCP), then run a workload on the new TPU by running from your machine:
 
 ```bash
-bash run_workload.sh --tpu-vm node-2 --workload ogbg --wandb-key bb5c8de9c4da52b0d16e708563cbb46608e78c18
+bash run_workload.sh --tpu-vm TPU_VM_NAME --workload ogbg --wandb-key YOUR_WANDB_API_KEY
 ```
 
 ### Run your submission on a workload
