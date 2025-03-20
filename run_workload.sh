@@ -67,4 +67,4 @@ if [ -n "$WANDB_API_KEY" ]; then
 fi
 
 echo "Starting workload $WORKLOAD on TPU VM $TPU_VM_NAME..."
-gcloud compute tpus tpu-vm ssh --zone "us-central2-b" "$TPU_VM_NAME" --project "mlcommons-algoperf" --worker=all --command "cd /algorithmic-efficiency && nohup /algorithmic-efficiency/_run_workload.sh $WORKLOAD $WANDB_KEY_PARAM > $WORKLOAD.log 2>&1 & echo \"Background process started with PID \$!\"; disown"
+gcloud compute tpus tpu-vm ssh --zone "us-central2-b" "$TPU_VM_NAME" --project "mlcommons-algoperf" --worker=all --command "cd /algorithmic-efficiency && mkdir -p ~/logs && nohup /algorithmic-efficiency/_run_workload.sh $WORKLOAD $WANDB_KEY_PARAM > ~/logs/$WORKLOAD.log 2>&1 & echo \"Background process started with PID \$!\"; disown"
