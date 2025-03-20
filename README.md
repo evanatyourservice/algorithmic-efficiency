@@ -151,33 +151,32 @@ url             = {https://openreview.net/forum?id=CtM5xjRSfm}
 
 ## TPU notes
 
+### Install and run a baseline nadamw workload
+
+This assumes v4-8 TPUs, mlcommons-algoperf project, us-central2-b region, but the scripts could be edited for another setup.
+
+Create a TPU queued-resource that
+- Enters the queue and eventually provisions a TPU vm
+- attaches a read-only persistent disk (assumes data already copied onto disk)
+- Uploads and runs `_tpu_install.py` to set up algoperf
+
+by running:
+
 ```bash
-sudo apt update && sudo apt install -y python3.11 python3.11-venv python3.11-dev
-
-mkdir -p /home/evanatyourservice/algorithmic-efficiency/venv_py311
-
-python3.11 -m venv /home/evanatyourservice/algorithmic-efficiency/venv_py311
-
-source /home/evanatyourservice/algorithmic-efficiency/venv_py311/bin/activate
-
-pip install --upgrade pip setuptools wheel
+bash create_tpu.sh  --node-name node-1 --data-disk dev-evan-1
 ```
 
-```bash
-# baseline
-python3 submission_runner.py \
-    --framework=jax \
-    --workload=ogbg \
-    --experiment_dir=/home/evanatyourservice/algorithmic-efficiency/experiments/jax_nadamw_full_budget \
-    --experiment_name=nadamw_full_budget \
-    --submission_path=prize_qualification_baselines/external_tuning/jax_nadamw_full_budget.py \
-    --tuning_ruleset=external \
-    --tuning_search_space=prize_qualification_baselines/external_tuning/tuning_search_space.json \
-    --num_tuning_trials=5 \
-    --data_dir=/dev/shm/ogbg \
-    --save_checkpoints=false \
-    --use_wandb
+Wait a bit for install to finish (could watch CPU usage through GCP), then run a workload on the new TPU by running from your machine:
 
+```bash
+run_workload.sh --tpu-vm=TPU_VM_NAME --workload=ogbg --wandb-key=YOUR_WANDB_API_KEY
+```
+
+### Run your submission on a workload
+
+TODO upload current code and run on a TPU vm
+
+```bash
 # kron
 python3 submission_runner.py \
     --framework=jax \
@@ -192,3 +191,11 @@ python3 submission_runner.py \
     --save_checkpoints=false \
     --use_wandb
 ```
+
+### Develop on a TPU vm through vscode ssh
+
+TODO
+
+### Tuning with Optuna
+
+TODO

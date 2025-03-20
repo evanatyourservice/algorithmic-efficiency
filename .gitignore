@@ -9,7 +9,7 @@ build/
 workdir/
 makefile
 *.out
-*.sh
+# *.sh
 *.swp
 */data/
 *events.out.tfevents*
