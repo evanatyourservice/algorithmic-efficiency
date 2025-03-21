@@ -1,5 +1,8 @@
 #!/bin/bash
 set -ex
+
+# all users are given some safe sudo access on TPU VMs, so let's just let this run as root
+
 LOGFILE="/setup_log.txt"
 
 {
@@ -10,7 +13,6 @@ sudo apt install -y python3.11 python3.11-venv python3.11-dev git
 
 # clone algoperf
 git clone https://github.com/evanatyourservice/algorithmic-efficiency.git
-cd algorithmic-efficiency
 
 # env
 mkdir -p /algorithmic-efficiency/venv_py311
@@ -21,6 +23,7 @@ source /algorithmic-efficiency/venv_py311/bin/activate
 pip install --upgrade pip setuptools wheel
 
 # install algoperf
+cd algorithmic-efficiency
 pip3 install -e '.[pytorch_cpu]'
 pip3 install -e '.[jax_tpu]'
 pip3 install -e '.[full]'
