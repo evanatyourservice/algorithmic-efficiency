@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# This script can be run from your local machine to run a workload on a TPU VM.
+
 # Example usage:
 # ./run_workload.sh -t node-1 -w fastmri
 # ./run_workload.sh -t node-1 -w ogbg -k YOUR_WANDB_API_KEY
@@ -13,11 +15,6 @@
 # - librispeech_conformer    : LibriSpeech with Conformer
 # - librispeech_deepspeech   : LibriSpeech with DeepSpeech
 # - wmt                      : WMT machine translation
-
-# NOTES
-# algoperf was installed as root
-# venv is at /algorithmic-efficiency/venv_py311
-# logs saved to /algorithmic-efficiency
 
 TPU_VM_NAME=""
 WANDB_API_KEY=""
@@ -67,5 +64,5 @@ if [ -n "$WANDB_API_KEY" ]; then
 fi
 
 echo "Starting workload $WORKLOAD on TPU VM $TPU_VM_NAME..."
-# all users are given some safe sudo access on TPU VMs, so let's just let this run as root
-gcloud compute tpus tpu-vm ssh --zone "us-central2-b" "$TPU_VM_NAME" --project "mlcommons-algoperf" --worker=all --command "sudo bash -c 'mkdir -p /algorithmic-efficiency/logs && nohup /algorithmic-efficiency/_run_workload.sh $WORKLOAD $WANDB_KEY_PARAM > /algorithmic-efficiency/logs/$WORKLOAD.log 2>&1 & echo \"Background process started with PID \$!\"; disown'"
+# all users are given some safe sudo access on TPU VMs, so since everything was installed as root, let's run this as root
+gcloud compute tpus tpu-vm ssh --zone "us-central2-b" "$TPU_VM_NAME" --project "mlcommons-algoperf" --worker=all --command "sudo bash -c 'chmod +x /algorithmic-efficiency/_run_workload.sh && mkdir -p /algorithmic-efficiency/logs && (nohup /algorithmic-efficiency/_run_workload.sh $WORKLOAD $WANDB_KEY_PARAM > /algorithmic-efficiency/logs/$WORKLOAD.log 2>&1 & pid=\$!; echo \"Background process started with PID \$pid\"; disown \$pid)'"

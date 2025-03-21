@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# This script can be run from your local machine to create a TPU VM and set up algoperf on it.
+
 # Example usage:
 # ./create_tpu.sh
 # ./create_tpu.sh -n node-1 -d dev-evan-1

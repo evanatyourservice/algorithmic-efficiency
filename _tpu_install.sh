@@ -1,8 +1,8 @@
 #!/bin/bash
+
+# this file is run on the TPU VM
+
 set -ex
-
-# all users are given some safe sudo access on TPU VMs, so let's just let this run as root
-
 LOGFILE="/setup_log.txt"
 
 {
@@ -27,7 +27,7 @@ cd algorithmic-efficiency
 pip3 install -e '.[pytorch_cpu]'
 pip3 install -e '.[jax_tpu]'
 pip3 install -e '.[full]'
-pip3 install wandb
+pip3 install 'wandb==0.19.6'
 
 # mount attached disk (read-only)
 sudo mkdir -p /mnt/disks/persist

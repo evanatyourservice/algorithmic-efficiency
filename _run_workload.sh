@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# all users are given some safe sudo access on TPU VMs, so let's just let this run as root
+# this file is run on the TPU VM
 
 WORKLOAD=$1
 WANDB_API_KEY=$2
