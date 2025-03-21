@@ -12,7 +12,6 @@ else
     USE_WANDB_FLAG=""
 fi
 
-sudo su
 cd /algorithmic-efficiency
 export LIBTPU_INIT_ARGS="--xla_enable_async_all_gather=true"
 source /algorithmic-efficiency/venv_py311/bin/activate
