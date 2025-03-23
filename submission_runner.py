@@ -415,8 +415,9 @@ def train_once(
       max_allowed_runtime_sec = (
           workload.max_allowed_runtime_sec if FLAGS.tuning_ruleset == 'external'
           else 1.5 * workload.max_allowed_runtime_sec)
-      train_state['is_time_remaining'] = (
-          train_state['accumulated_submission_time'] < max_allowed_runtime_sec)
+      # TODO (evanatyourservice): uncomment after TPU testing, using max steps only for now
+      # train_state['is_time_remaining'] = (
+      #     train_state['accumulated_submission_time'] < max_allowed_runtime_sec)
 
       # Eval if time is remaining (untimed).
       if train_state['is_time_remaining']:
