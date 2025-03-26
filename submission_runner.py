@@ -339,8 +339,7 @@ def train_once(
       train_state['validation_goal_reached'] and
       train_state['test_goal_reached'])
   while train_state['is_time_remaining'] and \
-      not goals_reached and \
-      not train_state['training_complete']:
+      not train_state['training_complete']:  # TODO (evanatyourservice): removed goals_reached check for TPU testing
 
     step_rng = prng.fold_in(rng, global_step)
 
